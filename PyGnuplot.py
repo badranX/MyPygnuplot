@@ -35,7 +35,7 @@ default_append_filename = '.append' # change this if you use a different termina
 default_folder_name = '.gnuplot'
 default_path = os.getcwd()
 is_in_notebook = False
-flag_reset_append = True
+flag_reset_append = False
 
 class _FigureList(object):
     def __init__(self):
@@ -119,8 +119,7 @@ def sv(data):
         tmp += "EOD"
     c(tmp)
 
-def write_arraylike_to_file(data, filename=default_append_filename, transpose=True, mode='w'):
-    file = open(os.path.join(default_path, filename), mode)
+def write_arraylike_to_file( file, data, transpose=True):
 
     columns = len(data)
     rows = len(data[0])
@@ -143,41 +142,86 @@ def write_arraylike_to_file(data, filename=default_append_filename, transpose=Tr
                 file.flush()  # write once after every 1000 entries
     file.close()  # write the rest
 
-def reset_append(arange=None, rate=None ):
-    global flag_reset_append
-    flag_reset_append = True
 
 
-def a(*args, reset=False, filename=default_append_filename, transpose=True):
-    global flag_reset_append
-    names = ''
-    if flag_reset_append or reset:
-        append= False
-        flag_reset_append=False
-    else:
-        append= True
+a_counters = {}#counter=0 means empty file
+a_files = {}
+def reset_a(rm=True):
+    global a_files, a_counters
+    if rm:
+        for f in a_files:
+            file = a_files[f]
+            #os.remove(file.name)
+            file.close()
+    a_counters = {}
+    a_files = {}
 
+def a(*args, **kwargs):#arange, final_count period, sequence, append=False, name=default_append_filename, persist_file=True transpose=True):
+    '''kwargs is either arange period sequence otherwise throw error'''
+    '''counter increases only when it writes'''
+    global  a_counters, a_files
+    transpose = kwargs.get('transpose',True)
+
+    #get filenames
+    name = kwargs.get('name', default_append_filename)
+    filenames = [name]
+    for i,  arr in enumerate(args):
+        if i == 0: continue
+        filenames.append(name + str(i))
+
+    #init counter
+    if 'counter' in kwargs:
+        counter = kwargs['counter']
+        a_counters[name]= counter 
+    elif name not in a_counters:
+        a_counters[name] = 0
+    counter = a_counters[name]
+
+
+    #init files
+    if counter == 0:#first time, so initialize
+        mode = 'w'
+        for fname in filenames:
+            pyenv_filename = os.path.join(default_path, fname)
+            open(pyenv_filename, mode=mode).close()
+            if fname in a_files:
+                del a_files[fname]
+    if 'final_count' in kwargs:
+        final_count = kwargs['final_count']
+        if counter >= final_count:
+            return None
+    mode = 'a'
+    files = []
+    tmp =[]
+    for fname in filenames:
+        pyenv_filename = os.path.join(default_path, fname)
+        file = open(pyenv_filename, mode=mode)
+        tmp.append(file)
+        a_files[fname] = file
+    if len(tmp)==0:
+        #no arrays were provided
+        return None
+    files = tmp
+
+
+    #check sequence and period
+    if 'sequence' in kwargs:
+        if counter not in kwargs['sequence']:
+            return ' '.join(filenames)
+    elif 'period' in kwargs:
+        if (counter + 1) % kwargs['rate'] == 0:
+            return ' '.join(filenames)
+    
     for i, data in enumerate(args):
-        pyenv_filename = os.path.join(default_path, filename)
         if type(data) is np.ndarray:
-            #TODO handle open exceptios in all files
-            if append:
-                file = open(pyenv_filename, mode='a')
-            else:
-                file = open(pyenv_filename, mode='w')
-
             if transpose:
-                np.savetxt(file, data.T)
+                np.savetxt(files[i].name, data.T)
             else:
-                np.savetxt(file, data)
+                np.savetxt(files[i].name, data)
         else:
-            write_arraylike_to_file(data,filename, mode= 'a' if append else 'w')
-        names = names + filename + ' '
-        if i!=0:
-            filename = filename[:i//10+1] + str(i)[:i]
-        else:
-            filename = filename + '1'
-    return names
+            write_arraylike_to_file(files[i], data)
+    a_counters[name] += 1
+    return ' '.join(filenames)
 
 
 
