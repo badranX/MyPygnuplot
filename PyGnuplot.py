@@ -177,7 +177,7 @@ def getID():
     info = inspect.getframeinfor(frame)
     return info.filename + '_' + info.lineno + '_' + info.lineno
 
-def get_names(*args, ID, same):
+def get_names(args, ID, same):
     #get filenames
     global filenames
     if ID in a_names:
@@ -194,7 +194,7 @@ def get_names(*args, ID, same):
                 assert(len(arg)!=0)
                 for j in range(len(arg)):
                     var_name =  get_var_name(arg[j], default_filename  + '-' + str(j))
-                    filename += var_name + ('_' if j==len(arg) else '')
+                    filename += var_name + ('_' if (j+1)!=len(arg) else '')
                     sub_varnames.append(var_name)
             else:
                 filename = get_var_name(arg, default_filename + '-' + str(0))
@@ -216,12 +216,49 @@ def get_names(*args, ID, same):
     return filenames, varnames
 
 
+def _free_a(ID, filenames):
+    global a_files
+    for f in a_files[ID]:
+        f.close()
+    del a_files[ID]
+
+def _init_files_a(ID, filenames):
+    '''empty files and initialize a_files'''
+    '''save a_files[ID] list of files descriptors in the same order as filenames'''
+    files = []
+    global a_files
+        #remove files in descriptors
+    if ID in a_files:
+        for f in a_files[ID]:
+            f.close()
+            try:#TODO recheck emptying file
+                os.remove(f.name)#TODO maybe open(path,'w').close()
+            except:
+                open(f.name, 'w').close()
+                pass
+        del a_files[ID]
+
+
+    #init file list in order of filenames, and delete files if found or empty them
+    files=[]
+    for fname in filenames:
+        path = os.path.join(default_folder_name,fname)
+        try:#TODO refactor
+            os.remove(path)#TODO maybe open(path,'w').close()
+        except OSError as e:#TODO NotEmplementedException
+            open(path, 'w').close()
+            pass
+        file = open(path, 'a')
+        files.append(file)
+    a_files[ID] = files
+
+
+
+
 def a(*args, **kwargs):#arange, final_count period, sequence, append=False, ID=default_append_filename, persist_file=True transpose=True):
     '''kwargs is either arange period sequence otherwise throw error'''
     '''counter increases only when it writes'''
-
     global  a_counters, a_files
-    transpose = kwargs.get('transpose',False)
     comment= kwargs.get('comment', True)
     same= kwargs.get('same', False)
 
@@ -235,110 +272,69 @@ def a(*args, **kwargs):#arange, final_count period, sequence, append=False, ID=d
         a_counters[ID] = 0
     counter = a_counters[ID]
 
-
-    #init files
+    #init files filenames, 
     filenames, varnames= get_names(args,ID= ID,same= same)
-    if counter == 0:#first time, so initialize
-        mode = 'w'
-        for fname in filenames:
-            if fname in a_files:
-                a_files[fname].close()
-                del a_files[fname]
-            path = os.path.join(default_folder_name,fname)
-            try:
-                os.remove(path)
-            except OSError as e:#TODO NotEmplementedException
-                pass
+    if counter == 0:#if 0 then init files
+        _init_files_a(ID, filenames)
 
-            #pyenv_filename = os.path.join(default_path, fname)
-            #open(pyenv_filename, mode=mode).close()
 
     if 'final_count' in kwargs:
         final_count = kwargs['final_count']
         if counter >= final_count:
-            return None
-    mode = 'a'
-    files = []
-    tmp =[]
-    for fname in filenames:
-        pyenv_filename = os.path.join(default_path, fname)
-        file = open(pyenv_filename, mode=mode)
-        file.write('')
-        file.flush()
-        tmp.append(file)
-        a_files[fname] = file
-    if len(tmp)==0:
-        #no arrays were provided
-        print('no arrays were provided')
-        return None
-    files = tmp
-
+            _free_a(ID, filenames)
+            return ' '.join(filenames)
 
     #check sequence and period
     if 'sequence' in kwargs:
         if counter not in kwargs['sequence']:
+            _free_a(ID, filenames)
             return ' '.join(filenames)
     elif 'period' in kwargs:
         if (counter + 1) % kwargs['rate'] == 0:
+            _free_a(ID, filenames)
             return ' '.join(filenames)
     
-    print(len(args))
-    print(len(filenames))
+    files = a_files[ID]
     for i, data in enumerate(args):
-        if counter == 0:
-            files[i].write('# ' + ' '.join(varnames[i]) + '\n')
-        data = if_numpylike_make_one_numpy_arr(data)
-        if(comment):
-            files[i].write('#' + str(counter) + '\n')
-        if type(data) is str:
-            files[i].write(data)
-            if comment and data[-1] != '\n':
-                files[i].write('\n')
-        if type(data) is np.ndarray:
-            if transpose:
-                np.savetxt(files[i], data.T)
-            else:
-                np.savetxt(files[i], data)
-            files[i].flush()
-        elif type(data) == str:
-            files[i].write(data)
-            if comment and data[-1] != '\n':
-                files[i].write('\n')
-            files[i].flush()
-        else:
-            write_arraylike_to_file(files[i], data, transpose)
+        write_general(files[i], data, counter, comment, varnames[i])
     a_counters[ID] += 1
     return ' '.join(filenames)
 
 
 #TODO alter file as a variable name
-def write_general(file, data):
-    row=0
-    while True:
-        row_str = ''
-        column=0
-        for arr in data:
-            try:
-                arr[row]
-            except IndexError:
-                return
+def write_general(file, data, counter, comment, variable_names):
+    #i is data index in parameters/args
+    if counter == 0:
+        file.write('# ' + ' '.join(variable_names) + '\n')
+    if type(data) is str:
+        file.write(data)
+        if comment and data[-1] != '\n':
+            file.write('\n')
+        file.flush()
+        return
+    else:
+        out= make_one_numpy_arr(data)
+        np.savetxt(file, out)
+        file.flush()
+
+
+def make_one_numpy_arr(data):
+    if type(data) is not tuple:
+        data = (data,)
+    data = list(data)
+    #make sure everything is numpy of 2 dimensions
+    for i, arr in enumerate(data):
+        if type(arr) is list:
             try:
                 arr[0][0]
-            except TypeError:
-                arr = np.array(arr)
-                arr = arr[..., None]
-            column= 0
-            for j in range(len(arr[row])):
-                row_str += str(arr[row][column]) + ' ' 
-                column += 1
-        file.write(row_str[:-1] + '\n')
-        file.flush()#TODO make it less often
-        row += 1
-
-
-
-        
-            
+            except:
+                pass
+            else:
+                raise ValueError('you provided a list that contains a list! lists are used as an array of one column')
+            data[i]=arr = np.array(arr)[..., None]
+        elif isPytorch and torch.is_tensor(arr):
+            data[i] = arr = arr.detach().numpy()
+    return np.concatenate(tuple(data), axis=1)
 
 
         
