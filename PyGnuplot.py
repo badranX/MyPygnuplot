@@ -155,6 +155,13 @@ def write_arraylike_to_file( file, data, transpose):
 a_counters = {}#counter=0 means empty file
 a_names = {}#counter=0 means empty file
 a_files = {}
+
+def remove_files():
+    #copy/paste from SO
+    for f in os.listdir(default_folder_name):
+        os.remove(os.path.join(default_folder_name, f)) 
+
+
 def free_a(rm=True):
     global a_files, a_counters
     if rm:
@@ -177,32 +184,31 @@ def getID():
     info = inspect.getframeinfor(frame)
     return info.filename + '_' + info.lineno + '_' + info.lineno
 
-def get_names(args, ID, same):
+def get_names(args, ID, same, counter):
     #get filenames
     global filenames
-    if ID in a_names:
+    if ID in a_names and counter !=0: #if counter=0 need to reset
         return a_names[ID]
 
-    filenames=[]
+    #get file names
+    filenames=[ID]
+    for i,  _ in enumerate(args):
+        if i !=0:
+            filenames.append(ID + str(i))
+
     varnames=[]
     if same:
         for i,  arg in enumerate(args):
             sub_varnames = []
-            filename = ''
-            default_filename = ID + (str(i) if i!=0 else '')
             if type(arg) is tuple:
                 assert(len(arg)!=0)
                 for j in range(len(arg)):
-                    var_name =  get_var_name(arg[j], default_filename  + '-' + str(j))
-                    filename += var_name + ('_' if (j+1)!=len(arg) else '')
+                    var_name =  get_var_name(arg[j], ID  + '-' + str(j))
                     sub_varnames.append(var_name)
             else:
-                filename = get_var_name(arg, default_filename + '-' + str(0))
-                sub_varnames.append(filename)
+                sub_varnames.append(ID)
             varnames.append(sub_varnames)
-            filenames.append(filename)
     else:
-        filenames.append(ID)
         for i,  _ in enumerate(args):
             sub_varnames = []
             if type(args[i]) is tuple:
@@ -210,8 +216,6 @@ def get_names(args, ID, same):
             else:
                 sub_varnames.append(ID + '-' + str(0))
             varnames.append(sub_varnames)
-            if i !=0:
-                filenames.append(ID + str(i))
     a_names[ID] = filenames, varnames
     return filenames, varnames
 
@@ -273,7 +277,7 @@ def a(*args, **kwargs):#arange, final_count period, sequence, append=False, ID=d
     counter = a_counters[ID]
 
     #init files filenames, 
-    filenames, varnames= get_names(args,ID= ID,same= same)
+    filenames, varnames= get_names(args,ID= ID,same= same, counter= counter)
     if counter == 0:#if 0 then init files
         _init_files_a(ID, filenames)
 
@@ -304,8 +308,6 @@ def a(*args, **kwargs):#arange, final_count period, sequence, append=False, ID=d
 #TODO alter file as a variable name
 def write_general(file, data, counter, comment, variable_names):
     #i is data index in parameters/args
-    if counter == 0:
-        file.write('# ' + ' '.join(variable_names) + '\n')
     if type(data) is str:
         file.write(data)
         if comment and data[-1] != '\n':
@@ -313,7 +315,13 @@ def write_general(file, data, counter, comment, variable_names):
         file.flush()
         return
     else:
-        out= make_one_numpy_arr(data)
+        out, lengths= make_one_numpy_arr(data)
+        if counter == 0:
+            column_names = []
+            for index, l in enumerate(lengths):
+                for c in range(l):
+                    column_names.append(variable_names[index] + '[' + str(c) + ']')
+            file.write('# ' + ' '.join(column_names) + '\n')
         np.savetxt(file, out)
         file.flush()
 
@@ -322,6 +330,7 @@ def make_one_numpy_arr(data):
     if type(data) is not tuple:
         data = (data,)
     data = list(data)
+    indices = []
     #make sure everything is numpy of 2 dimensions
     for i, arr in enumerate(data):
         if type(arr) is list:
@@ -334,7 +343,7 @@ def make_one_numpy_arr(data):
             data[i]=arr = np.array(arr)[..., None]
         elif isPytorch and torch.is_tensor(arr):
             data[i] = arr = arr.detach().numpy()
-    return np.concatenate(tuple(data), axis=1)
+    return np.concatenate(tuple(data), axis=1), list(map(lambda x: len(x[0]), data)) #one_numpy_arr, list of row lengths
 
 
         
@@ -434,6 +443,7 @@ def pdf(filename='tmp.pdf', width=14, height=9, fontsize=12, term=default_term):
     c('set out "' + filename + '";')
     c('replot;')
     c('set term ' + str(term) + '; replot')
+
 
 
 #prevent ipython from maintaining the values
