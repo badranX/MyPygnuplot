@@ -162,19 +162,27 @@ def remove_files():
         os.remove(os.path.join(default_folder_name, f)) 
 
 
-def free_a(rm=True):
+def free_a(rm=False):
     global a_files, a_counters
-    if rm:
-        for f in a_files:
-            file = a_files[f]
-            #os.remove(file.ID)
-            file.close()
+    for files in a_files:
+        print(files)
+        for f in files:
+            try:
+                f.close()
+            except:
+                print('TODO: couldnt close file, theres a bug. A file is a str sometimes, maybe python bug')
+
+            if rm:
+                try:
+                    os.remove(f.name)
+                except:
+                    pass
     a_counters.clear()
     a_files.clear()
 
 def get_var_name(var, default=None):
 
-    frame = inspect.currentframe().f_back.f_back
+    frame = inspect.currentframe().f_back.f_back.f_back #we called from write_general->s(.) or a( .) -> user
     caller_local_vars = frame.f_locals.items()
     possible_names= [get_var_name for get_var_name, var_val in caller_local_vars if var_val is var]
     return default if len(possible_names)==0 else possible_names[0]
@@ -186,7 +194,6 @@ def getID():
 
 def get_names(args, ID, same, counter):
     #get filenames
-    global filenames
     if ID in a_names and counter !=0: #if counter=0 need to reset
         return a_names[ID]
 
@@ -197,34 +204,40 @@ def get_names(args, ID, same, counter):
             filenames.append(ID + str(i))
 
     varnames=[]
-    if same:
-        for i,  arg in enumerate(args):
-            sub_varnames = []
+    for i,  arg in enumerate(args):
+        sub_varnames = []
+        if type(arg) is dict:
+            sub_varnames = list(arg.keys())
+        elif same:
             if type(arg) is tuple:
                 assert(len(arg)!=0)
                 for j in range(len(arg)):
                     var_name =  get_var_name(arg[j], ID  + '-' + str(j))
                     sub_varnames.append(var_name)
             else:
-                sub_varnames.append(ID)
-            varnames.append(sub_varnames)
-    else:
-        for i,  _ in enumerate(args):
+                var_name =  get_var_name(arg, ID)
+                sub_varnames.append(var_name)#bcz it returns a list of lists at the end
+        else:
             sub_varnames = []
             if type(args[i]) is tuple:
                 sub_varnames += [ID + '-' + str(index) for index, _ in enumerate(args[i])]
             else:
                 sub_varnames.append(ID + '-' + str(0))
             varnames.append(sub_varnames)
+        varnames.append(sub_varnames)
+
     a_names[ID] = filenames, varnames
     return filenames, varnames
 
 
 def _free_a(ID, filenames):
     global a_files
-    for f in a_files[ID]:
-        f.close()
-    del a_files[ID]
+    if ID in a_files:
+        for f in a_files[ID]:
+            f.close()
+        a_files.pop(ID, None)
+    if ID in a_counters:
+        a_counters[ID] = 0
 
 def _init_files_a(ID, filenames):
     '''empty files and initialize a_files'''
@@ -240,11 +253,9 @@ def _init_files_a(ID, filenames):
             except:
                 open(f.name, 'w').close()
                 pass
-        del a_files[ID]
+        a_files.pop(ID, None)
 
-
-    #init file list in order of filenames, and delete files if found or empty them
-    files=[]
+    #init file list in order of filenames, and delete files if found or empty them files=[]
     for fname in filenames:
         path = os.path.join(default_folder_name,fname)
         try:#TODO refactor
@@ -255,6 +266,7 @@ def _init_files_a(ID, filenames):
         file = open(path, 'a')
         files.append(file)
     a_files[ID] = files
+    return files
 
 
 
@@ -279,7 +291,7 @@ def a(*args, **kwargs):#arange, final_count period, sequence, append=False, ID=d
     #init files filenames, 
     filenames, varnames= get_names(args,ID= ID,same= same, counter= counter)
     if counter == 0:#if 0 then init files
-        _init_files_a(ID, filenames)
+        _init_files_a(ID, filenames)#save file descriptors
 
 
     if 'final_count' in kwargs:
@@ -309,113 +321,72 @@ def a(*args, **kwargs):#arange, final_count period, sequence, append=False, ID=d
 def write_general(file, data, counter, comment, variable_names):
     #i is data index in parameters/args
     if type(data) is str:
+        if comment:
+            file.write('#' + str(counter) + '\n')
         file.write(data)
         if comment and data[-1] != '\n':
             file.write('\n')
         file.flush()
         return
     else:
-        out, lengths= make_one_numpy_arr(data)
+        out, lengths= make_one_numpy_arr(data, variable_names)
         if counter == 0:
             column_names = []
             for index, l in enumerate(lengths):
                 for c in range(l):
                     column_names.append(variable_names[index] + '[' + str(c) + ']')
             file.write('# ' + ' '.join(column_names) + '\n')
+        if comment:
+            file.write('#' + str(counter) + '\n')
         np.savetxt(file, out)
         file.flush()
 
 
-def make_one_numpy_arr(data):
-    if type(data) is not tuple:
-        data = (data,)
-    data = list(data)
+def make_one_numpy_arr(data, variable_names):
+    #variable_names for log attempt
+    if type(data) is dict:
+        data = list(data.values())
+    elif type(data) is tuple:
+        data = list(data)
+    else:
+        data = [data]
     indices = []
     #make sure everything is numpy of 2 dimensions
     for i, arr in enumerate(data):
         if type(arr) is list:
-            try:
-                arr[0][0]
-            except:
-                pass
-            else:
-                raise ValueError('you provided a list that contains a list! lists are used as an array of one column')
-            data[i]=arr = np.array(arr)[..., None]
+            data[i]= arr = np.array(arr)
         elif isPytorch and torch.is_tensor(arr):
             data[i] = arr = arr.detach().numpy()
+
+        if len(arr.shape)==0:
+            data[i] = arr = arr[..., None, None]
+        elif len(arr.shape)==1:
+            data[i] = arr = arr[..., None]
+        elif len(arr.shape)>2:
+            raise ValueError( str(variable_names[i]) + ' has ' + str(len(arr.shape)) + ' dimensions ::' +  ' one or two dimensions needed')
+        elif len(arr.shape)==0:
+            raise ValueError( str(variable_names[i]) + ' has ' + str(len(arr.shape)) + ' dimensions ::' + ' one or two dimensions needed')
     return np.concatenate(tuple(data), axis=1), list(map(lambda x: len(x[0]), data)) #one_numpy_arr, list of row lengths
 
 
-        
 
 
-def if_numpylike_make_one_numpy_arr(data):
-    '''it converst data into a list'''#TODO
-    #If numpy like will transfer everything into one array, otherwise a tuple or a list will be enumerable for normal writing to file, so Im converting data to list
-    if type(data) is tuple:
-        data = list(data) ####
-        isNumpyLike = len(data) > 0
-        for i, x in enumerate(data):
-            isNumpyLike = isNumpyLike and (isPytorch and \
-                                torch.is_tensor(x) or \
-                                type(x) is np.ndarray)
-            if isPytorch and torch.is_tensor(x):
-                x = x.detach().numpy() #TODO do we need this?
-                data[i]=x
-            if isNumpyLike and len(x.shape)==1: #both numpy and torch implement len(.)
-                x= x[..., None]
-                data[i]=x
-
-        if isNumpyLike:
-            data = np.concatenate(tuple(data),axis=1)#TODO what about 1D array!!
-    elif isPytorch and torch.is_tensor(data):
-        data = data.detach().numpy()
-    return data
-
-def s(*args, ID=default_filename, transpose=False):
+def s(*args, ID=default_filename, comment=False, same=False):
     '''
     saves numbers arrays and text into ID (default = '.dat)
     (assumes equal sizes and 2D data sets)
     >>> s(data, ID='.dat')  # overwrites/creates .dat
     '''
-    names = ''
+    counter =0 #reusing append helper functions
+    #varnames is a list of lists
+    filenames, varnames = get_names(args, ID= ID,same= same, counter =counter)
+    files = _init_files_a(ID, filenames)
     for i, data in enumerate(args):
-        data = if_numpylike_make_one_numpy_arr(data)
-        pyenv_filename = os.path.join(default_path, ID)
-        if type(data) is np.ndarray:
-            if transpose:
-                np.savetxt(pyenv_filename, data.T)
-            else:
-                np.savetxt(pyenv_filename, data)
-        else:
-            file = open(pyenv_filename, 'w')
-
-            columns = len(data)
-            rows = len(data[0])
-
-            if transpose: 
-                for j in range(rows):
-                    for i in range(columns):
-                        file.write(str(data[i][j]))
-                        file.write(' ')
-                    file.write('\n')
-                    if j % 1000 == 0 :
-                        file.flush()  # write once after every 1000 entries
-            else:
-                for i in range(columns):
-                    for j in range(rows):
-                        file.write(str(data[i][j]))
-                        file.write(' ')
-                    file.write('\n')
-                    if j % 1000 == 0 :
-                        file.flush()  # write once after every 1000 entries
-            file.close()  # write the rest
-        names = names + ID + ' '
-        if i!=0:
-            ID = ID[:i//10+1] + str(i)[:i]
-        else:
-            ID = ID + '1'
-    return names
+        write_general(files[i], data, counter, comment, varnames[i])
+    for f in files:
+        f.close()  # write the rest
+    a_files.pop(ID, None)#saved by _init_files_a
+    return ' '.join(filenames)
 
 def plot(data, filename='tmp.dat'):
     ''' Save data into filename (default = 'tmp.dat') and send plot instructions to Gnuplot'''
