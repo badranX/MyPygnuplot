@@ -1,8 +1,7 @@
 '''
 By Ben Schneider
 
-Simple python wrapper for Gnuplot
-Thanks to steview2000 for suggesting to separate processes,
+Simple python wrapper for Gnuplot Thanks to steview2000 for suggesting to separate processes,
     jrbrearley for help with debugging in python 3.4+
 
 Example:
@@ -23,6 +22,15 @@ from subprocess import Popen as _Popen, PIPE as _PIPE
 import sys
 import os
 import time
+import inspect
+
+isPytorch = False
+try:
+    import torch
+except:
+    isPytorch = False
+else:
+    isPytorch = True
 
 
 try:
@@ -119,7 +127,7 @@ def sv(data):
         tmp += "EOD"
     c(tmp)
 
-def write_arraylike_to_file( file, data, transpose=True):
+def write_arraylike_to_file( file, data, transpose):
 
     columns = len(data)
     rows = len(data[0])
@@ -145,47 +153,106 @@ def write_arraylike_to_file( file, data, transpose=True):
 
 
 a_counters = {}#counter=0 means empty file
+a_names = {}#counter=0 means empty file
 a_files = {}
-def reset_a(rm=True):
+def free_a(rm=True):
     global a_files, a_counters
     if rm:
         for f in a_files:
             file = a_files[f]
-            #os.remove(file.name)
+            #os.remove(file.ID)
             file.close()
-    a_counters = {}
-    a_files = {}
+    a_counters.clear()
+    a_files.clear()
 
-def a(*args, **kwargs):#arange, final_count period, sequence, append=False, name=default_append_filename, persist_file=True transpose=True):
+def get_var_name(var, default=None):
+
+    frame = inspect.currentframe().f_back.f_back
+    caller_local_vars = frame.f_locals.items()
+    possible_names= [get_var_name for get_var_name, var_val in caller_local_vars if var_val is var]
+    return default if len(possible_names)==0 else possible_names[0]
+
+def getID():
+    frame = inspect.currentframe().f_back.f_back
+    info = inspect.getframeinfor(frame)
+    return info.filename + '_' + info.lineno + '_' + info.lineno
+
+def get_names(*args, ID, same):
+    #get filenames
+    global filenames
+    if ID in a_names:
+        return a_names[ID]
+
+    filenames=[]
+    varnames=[]
+    if same:
+        for i,  arg in enumerate(args):
+            sub_varnames = []
+            filename = ''
+            default_filename = ID + (str(i) if i!=0 else '')
+            if type(arg) is tuple:
+                assert(len(arg)!=0)
+                for j in range(len(arg)):
+                    var_name =  get_var_name(arg[j], default_filename  + '-' + str(j))
+                    filename += var_name + ('_' if j==len(arg) else '')
+                    sub_varnames.append(var_name)
+            else:
+                filename = get_var_name(arg, default_filename + '-' + str(0))
+                sub_varnames.append(filename)
+            varnames.append(sub_varnames)
+            filenames.append(filename)
+    else:
+        filenames.append(ID)
+        for i,  _ in enumerate(args):
+            sub_varnames = []
+            if type(args[i]) is tuple:
+                sub_varnames += [ID + '-' + str(index) for index, _ in enumerate(args[i])]
+            else:
+                sub_varnames.append(ID + '-' + str(0))
+            varnames.append(sub_varnames)
+            if i !=0:
+                filenames.append(ID + str(i))
+    a_names[ID] = filenames, varnames
+    return filenames, varnames
+
+
+def a(*args, **kwargs):#arange, final_count period, sequence, append=False, ID=default_append_filename, persist_file=True transpose=True):
     '''kwargs is either arange period sequence otherwise throw error'''
     '''counter increases only when it writes'''
-    global  a_counters, a_files
-    transpose = kwargs.get('transpose',True)
 
-    #get filenames
-    name = kwargs.get('name', default_append_filename)
-    filenames = [name]
-    for i,  arr in enumerate(args):
-        if i == 0: continue
-        filenames.append(name + str(i))
+    global  a_counters, a_files
+    transpose = kwargs.get('transpose',False)
+    comment= kwargs.get('comment', True)
+    same= kwargs.get('same', False)
+
+    ID = str(kwargs.get('ID', default_filename))
 
     #init counter
     if 'counter' in kwargs:
         counter = kwargs['counter']
-        a_counters[name]= counter 
-    elif name not in a_counters:
-        a_counters[name] = 0
-    counter = a_counters[name]
+        a_counters[ID]= counter 
+    elif ID not in a_counters:
+        a_counters[ID] = 0
+    counter = a_counters[ID]
 
 
     #init files
+    filenames, varnames= get_names(args,ID= ID,same= same)
     if counter == 0:#first time, so initialize
         mode = 'w'
         for fname in filenames:
-            pyenv_filename = os.path.join(default_path, fname)
-            open(pyenv_filename, mode=mode).close()
             if fname in a_files:
+                a_files[fname].close()
                 del a_files[fname]
+            path = os.path.join(default_folder_name,fname)
+            try:
+                os.remove(path)
+            except OSError as e:#TODO NotEmplementedException
+                pass
+
+            #pyenv_filename = os.path.join(default_path, fname)
+            #open(pyenv_filename, mode=mode).close()
+
     if 'final_count' in kwargs:
         final_count = kwargs['final_count']
         if counter >= final_count:
@@ -196,10 +263,13 @@ def a(*args, **kwargs):#arange, final_count period, sequence, append=False, name
     for fname in filenames:
         pyenv_filename = os.path.join(default_path, fname)
         file = open(pyenv_filename, mode=mode)
+        file.write('')
+        file.flush()
         tmp.append(file)
         a_files[fname] = file
     if len(tmp)==0:
         #no arrays were provided
+        print('no arrays were provided')
         return None
     files = tmp
 
@@ -212,28 +282,101 @@ def a(*args, **kwargs):#arange, final_count period, sequence, append=False, name
         if (counter + 1) % kwargs['rate'] == 0:
             return ' '.join(filenames)
     
+    print(len(args))
+    print(len(filenames))
     for i, data in enumerate(args):
+        if counter == 0:
+            files[i].write('# ' + ' '.join(varnames[i]) + '\n')
+        data = if_numpylike_make_one_numpy_arr(data)
+        if(comment):
+            files[i].write('#' + str(counter) + '\n')
+        if type(data) is str:
+            files[i].write(data)
+            if comment and data[-1] != '\n':
+                files[i].write('\n')
         if type(data) is np.ndarray:
             if transpose:
-                np.savetxt(files[i].name, data.T)
+                np.savetxt(files[i], data.T)
             else:
-                np.savetxt(files[i].name, data)
+                np.savetxt(files[i], data)
+            files[i].flush()
+        elif type(data) == str:
+            files[i].write(data)
+            if comment and data[-1] != '\n':
+                files[i].write('\n')
+            files[i].flush()
         else:
-            write_arraylike_to_file(files[i], data)
-    a_counters[name] += 1
+            write_arraylike_to_file(files[i], data, transpose)
+    a_counters[ID] += 1
     return ' '.join(filenames)
 
 
+#TODO alter file as a variable name
+def write_general(file, data):
+    row=0
+    while True:
+        row_str = ''
+        column=0
+        for arr in data:
+            try:
+                arr[row]
+            except IndexError:
+                return
+            try:
+                arr[0][0]
+            except TypeError:
+                arr = np.array(arr)
+                arr = arr[..., None]
+            column= 0
+            for j in range(len(arr[row])):
+                row_str += str(arr[row][column]) + ' ' 
+                column += 1
+        file.write(row_str[:-1] + '\n')
+        file.flush()#TODO make it less often
+        row += 1
 
-def s(*args, filename=default_filename, transpose=True):
+
+
+        
+            
+
+
+        
+
+
+def if_numpylike_make_one_numpy_arr(data):
+    '''it converst data into a list'''#TODO
+    #If numpy like will transfer everything into one array, otherwise a tuple or a list will be enumerable for normal writing to file, so Im converting data to list
+    if type(data) is tuple:
+        data = list(data) ####
+        isNumpyLike = len(data) > 0
+        for i, x in enumerate(data):
+            isNumpyLike = isNumpyLike and (isPytorch and \
+                                torch.is_tensor(x) or \
+                                type(x) is np.ndarray)
+            if isPytorch and torch.is_tensor(x):
+                x = x.detach().numpy() #TODO do we need this?
+                data[i]=x
+            if isNumpyLike and len(x.shape)==1: #both numpy and torch implement len(.)
+                x= x[..., None]
+                data[i]=x
+
+        if isNumpyLike:
+            data = np.concatenate(tuple(data),axis=1)#TODO what about 1D array!!
+    elif isPytorch and torch.is_tensor(data):
+        data = data.detach().numpy()
+    return data
+
+def s(*args, ID=default_filename, transpose=False):
     '''
-    saves numbers arrays and text into filename (default = '.dat)
+    saves numbers arrays and text into ID (default = '.dat)
     (assumes equal sizes and 2D data sets)
-    >>> s(data, filename='.dat')  # overwrites/creates .dat
+    >>> s(data, ID='.dat')  # overwrites/creates .dat
     '''
     names = ''
     for i, data in enumerate(args):
-        pyenv_filename = os.path.join(default_path, filename)
+        data = if_numpylike_make_one_numpy_arr(data)
+        pyenv_filename = os.path.join(default_path, ID)
         if type(data) is np.ndarray:
             if transpose:
                 np.savetxt(pyenv_filename, data.T)
@@ -262,11 +405,11 @@ def s(*args, filename=default_filename, transpose=True):
                     if j % 1000 == 0 :
                         file.flush()  # write once after every 1000 entries
             file.close()  # write the rest
-        names = names + filename + ' '
+        names = names + ID + ' '
         if i!=0:
-            filename = filename[:i//10+1] + str(i)[:i]
+            ID = ID[:i//10+1] + str(i)[:i]
         else:
-            filename = filename + '1'
+            ID = ID + '1'
     return names
 
 def plot(data, filename='tmp.dat'):
@@ -297,4 +440,7 @@ def pdf(filename='tmp.pdf', width=14, height=9, fontsize=12, term=default_term):
     c('set term ' + str(term) + '; replot')
 
 
+#prevent ipython from maintaining the values
+a_counters.clear()
+a_files.clear()
 fl = _FigureList()
