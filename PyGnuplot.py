@@ -64,9 +64,11 @@ class _FigureList(object):
             default_path = os.getcwd()
         else:
             default_path = os.path.join(os.getcwd(), default_folder_name)
-
-        proc = _Popen(['gnuplot', '-p'], shell=False, stdin=_PIPE, cwd=default_path, universal_newlines=True)  # persitant -p
-        self.instance = {0 : [proc, default_term]}  # {figure number : [process, terminal type]}
+        try:
+            proc = _Popen(['gnuplot', '-p'], shell=False, stdin=_PIPE, cwd=default_path, universal_newlines=True)  # persitant -p
+            self.instance = {0 : [proc, default_term]}  # {figure number : [process, terminal type]}
+        except Exception as e:
+            print("Couldn't run gnuplot, probably not installed. you wont be able to use the c(.) method: \n" + str(e))
         self.n = 0  # currently selected Figure
 
         # Format:
