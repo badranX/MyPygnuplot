@@ -16,6 +16,10 @@ Example:
     gp.p('myfigure.ps')  # creates postscript file
 
 '''
+
+#TODO raise error when TYPE is not matched either striing or Array
+#TODO previous one provide an integer and a strange error is showed 
+
 import numpy as np
 import re
 from subprocess import Popen as _Popen, PIPE as _PIPE
@@ -33,16 +37,20 @@ else:
     isPytorch = True
 
 
+isNotebook = False
 try:
     from IPython.display import Image, display
 except:
-    pass
+    isNotebook = False
+else:
+    isNotebook = True
+
 default_term = 'x11'  # change this if you use a different terminal
-default_filename = '.dat'  # change this if you use a different terminal
+default_filename = 'data'  # change this if you use a different terminal
+default_append_file = 'append'  # change this if you use a different terminal
 default_append_filename = '.append' # change this if you use a different terminal
 default_folder_name = '.gnuplot'
 default_path = os.getcwd()
-is_in_notebook = False
 flag_reset_append = False
 
 class _FigureList(object):
@@ -95,19 +103,17 @@ def c(command):
     proc.stdin.flush()  # send the command in python 3.4+
 
 
-
-def in_notebook(isNotebook=True):
-    global is_in_notebook
-    if not isNotebook:
-        c("set term " +  default_term)
-        is_in_notebook= False
-    else:
+def in_notebook():
+    global isNotebook, default_term
+    if isNotebook:
+        default_term = 'png'
         c('set term png')
         c('set output ".img.dat.png"')
-        is_in_notebook= True
+    return isNotebook
 
-    #TODO notebook only
-    def show():
+#TODO notebook only
+def show():
+    if isNotebook:
         display(Image(filename='.img.dat.png'))
 
 def sv(data):
@@ -165,20 +171,29 @@ def remove_files():
 def free_a(rm=False):
     global a_files, a_counters
     for files in a_files:
-        print(files)
         for f in files:
             try:
                 f.close()
-            except:
-                print('TODO: couldnt close file, theres a bug. A file is a str sometimes, maybe python bug')
+            except Exception as e:
+                #TODO bug: str object has no attribute close
+                #print('TODO: couldnt close file, theres a bug. A file is a str sometimes, maybe python bug')
+                #print(e)
+                pass
 
             if rm:
                 try:
                     os.remove(f.name)
                 except:
-                    pass
+                    try:
+                        open(f.name,'w').close()
+                    except:
+                        pass
     a_counters.clear()
     a_files.clear()
+
+def free(rm=False):
+    free_a(rm)
+
 
 def get_var_name(var, default=None):
 
@@ -278,7 +293,7 @@ def a(*args, **kwargs):#arange, final_count period, sequence, append=False, ID=d
     comment= kwargs.get('comment', True)
     same= kwargs.get('same', False)
 
-    ID = str(kwargs.get('ID', default_filename))
+    ID = str(kwargs.get('ID', default_append_file))
 
     #init counter
     if 'counter' in kwargs:
@@ -366,7 +381,7 @@ def make_one_numpy_arr(data, variable_names):
             raise ValueError( str(variable_names[i]) + ' has ' + str(len(arr.shape)) + ' dimensions ::' +  ' one or two dimensions needed')
         elif len(arr.shape)==0:
             raise ValueError( str(variable_names[i]) + ' has ' + str(len(arr.shape)) + ' dimensions ::' + ' one or two dimensions needed')
-    return np.concatenate(tuple(data), axis=1), list(map(lambda x: len(x[0]), data)) #one_numpy_arr, list of row lengths
+    return np.hstack(tuple(data)), list(map(lambda x: len(x[0]), data)) #one_numpy_arr, list of row lengths
 
 
 
