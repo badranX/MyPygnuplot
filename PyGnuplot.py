@@ -103,23 +103,23 @@ def c(command):
     >>> c('plot sin(x)')
     >>> c('plot ".dat" u 1:2 w lp)
     '''
+    if in_notebook() and first_cmd in ["plot", "splot", "replot"]:#also this method do setup if it's in notebook
+        command = "set output {}; ".format(default_img_output) + command
     proc = fl.instance[fl.n][0]  # this is where the process is
     proc.stdin.write(command + '\n')  # \n 'send return in python 2.7'
     proc.stdin.flush()  # send the command in python 3.4+
     first_cmd = command.lstrip().split(" ",1)[0]
 
-    if in_notebook() and first_cmd in ["plot", "splot", "replot"]:#also this method do setup if it's in notebook
-        show()
         
 
 
 def in_notebook(output=None):
     global isNotebook, default_term, default_img_output, default_notebook_term
     if isNotebook and default_term  != default_notebook_term:
-        output =  output if output else default_img_output
+        default_img_output =  output if output else default_img_output
         default_term = default_notebook_term
         c('set term {}'.format(default_term))
-        c("set output '{}'".format(output))
+        c("set output '{}'".format(default_img_output))
     return isNotebook
 
 #TODO notebook only
