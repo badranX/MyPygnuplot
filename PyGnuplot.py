@@ -46,6 +46,8 @@ else:
     isNotebook = True
 
 default_term = 'x11'  # change this if you use a different terminal
+default_notebook_term = 'out.png'
+default_img_output = 'out.png'
 default_filename = 'data'  # change this if you use a different terminal
 default_append_file = 'append'  # change this if you use a different terminal
 default_append_filename = '.append' # change this if you use a different terminal
@@ -95,6 +97,7 @@ def figure(number=None, args = '-p'):
 
 
 def c(command):
+    global isNotebook
     '''
     Send command to gnuplot
     >>> c('plot sin(x)')
@@ -103,21 +106,32 @@ def c(command):
     proc = fl.instance[fl.n][0]  # this is where the process is
     proc.stdin.write(command + '\n')  # \n 'send return in python 2.7'
     proc.stdin.flush()  # send the command in python 3.4+
+    first_cmd = command.lstrip().split(" ",1)[0]
+
+    if in_notebook() and first_cmd in ["plot", "splot", "replot"]:#also this method do setup if it's in notebook
+        show()
+        
 
 
-def in_notebook():
-    global isNotebook, default_term
-    if isNotebook:
-        default_term = 'png'
-        c('set term png')
-        c('set output "out.png"')
+def in_notebook(output=None):
+    global isNotebook, default_term, default_img_output, default_notebook_term
+    if isNotebook && default_term  != default_notebook_term:
+        output =  output if output else default_img_output
+        default_term = default_notebook_term
+        c('set term {}'.format(default_term))
+        c('set output "{}"'.format(output))
     return isNotebook
 
 #TODO notebook only
-def show(name='out.png'):
+def show(output=None):
+    global isNotebook, default_term, default_img_output, default_notebook_term
     #TODO WINDOWS directories
-    if isNotebook:
-        display(Image(filename='./.gnuplot/' + name))
+    file_name = './.gnuplot/' + output
+    if isNotebook and os.path.isfile(file_name):
+        output =  output if output else default_img_output
+        display(Image(filename=file_name))
+    else:
+        print('no graphics available')
 
 def sv(data):
     tmp = """$dat << EOD\n"""
