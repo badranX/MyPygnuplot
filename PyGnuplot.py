@@ -116,7 +116,7 @@ def c(command):
 
 
 def in_notebook(output=None):
-    global isNotebook, default_term, default_img_output, default_notebook_term
+    global isNotebook, default_term, default_img_output, default_notebook_term, default_folder_name
     if isNotebook and default_term  != default_notebook_term:
         default_img_output =  output if output else default_img_output
         default_term = default_notebook_term
@@ -125,7 +125,7 @@ def in_notebook(output=None):
 
 #TODO notebook only
 def show(output=None):
-    global isNotebook, default_term, default_img_output, default_notebook_term
+    global isNotebook, default_term, default_img_output, default_notebook_term, default_folder_name
     #TODO WINDOWS directories
     output =  output if output else default_img_output
     file_name = os.path.join(default_folder_name, output)
