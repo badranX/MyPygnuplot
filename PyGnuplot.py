@@ -110,13 +110,14 @@ def in_notebook():
     if isNotebook:
         default_term = 'png'
         c('set term png')
-        c('set output ".img.dat.png"')
+        c('set output "out.png"')
     return isNotebook
 
 #TODO notebook only
-def show():
+def show(name='out.png'):
+    #TODO WINDOWS directories
     if isNotebook:
-        display(Image(filename='.img.dat.png'))
+        display(Image(filename='./.gnuplot/' + name))
 
 def sv(data):
     tmp = """$dat << EOD\n"""
