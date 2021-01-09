@@ -46,7 +46,7 @@ else:
     isNotebook = True
 
 default_term = 'x11'  # change this if you use a different terminal
-default_notebook_term = 'out.png'
+default_notebook_term = 'png'
 default_img_output = 'out.png'
 default_filename = 'data'  # change this if you use a different terminal
 default_append_file = 'append'  # change this if you use a different terminal
