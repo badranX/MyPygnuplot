@@ -103,12 +103,12 @@ def c(command):
     >>> c('plot sin(x)')
     >>> c('plot ".dat" u 1:2 w lp)
     '''
+    first_cmd = command.lstrip().split(" ",1)[0]
     if in_notebook() and first_cmd in ["plot", "splot", "replot"]:#also this method do setup if it's in notebook
         command = "set output {}; ".format(default_img_output) + command
     proc = fl.instance[fl.n][0]  # this is where the process is
     proc.stdin.write(command + '\n')  # \n 'send return in python 2.7'
     proc.stdin.flush()  # send the command in python 3.4+
-    first_cmd = command.lstrip().split(" ",1)[0]
 
         
 
