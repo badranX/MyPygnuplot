@@ -115,7 +115,7 @@ def c(command):
 
 def in_notebook(output=None):
     global isNotebook, default_term, default_img_output, default_notebook_term
-    if isNotebook && default_term  != default_notebook_term:
+    if isNotebook and default_term  != default_notebook_term:
         output =  output if output else default_img_output
         default_term = default_notebook_term
         c('set term {}'.format(default_term))
