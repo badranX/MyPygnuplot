@@ -57,7 +57,7 @@ flag_reset_append = False
 
 class _FigureList(object):
     def __init__(self):
-        global default_path
+        global default_path, default_folder_name, default_term
         if isNotebook:
             #TODO JUPYTER DOESNt show hidden folders
             default_folder_name = default_folder_name[1:]
