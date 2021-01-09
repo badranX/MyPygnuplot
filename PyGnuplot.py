@@ -126,9 +126,9 @@ def in_notebook(output=None):
 def show(output=None):
     global isNotebook, default_term, default_img_output, default_notebook_term
     #TODO WINDOWS directories
+    output =  output if output else default_img_output
     file_name = './.gnuplot/' + output
     if isNotebook and os.path.isfile(file_name):
-        output =  output if output else default_img_output
         display(Image(filename=file_name))
     else:
         print('no graphics available')
