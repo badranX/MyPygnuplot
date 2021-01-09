@@ -128,7 +128,7 @@ def show(output=None):
     global isNotebook, default_term, default_img_output, default_notebook_term
     #TODO WINDOWS directories
     output =  output if output else default_img_output
-    file_name = './.gnuplot/' + output
+    file_name = os.path.join(default_folder_name, output)
     if isNotebook and os.path.isfile(file_name):
         display(Image(filename=file_name))
     else:
