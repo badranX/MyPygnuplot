@@ -119,7 +119,7 @@ def in_notebook(output=None):
         output =  output if output else default_img_output
         default_term = default_notebook_term
         c('set term {}'.format(default_term))
-        c('set output "{}"'.format(output))
+        c("set output '{}'".format(output))
     return isNotebook
 
 #TODO notebook only
