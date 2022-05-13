@@ -1,3 +1,3 @@
-This is a fork of PyGnuplot by Ben Schneider. The project is personal. The goal is to fascilatate easier logging for data and plots for data science related tasks. I do not like to work in a browser, I'd prefere a terminal or a local editor. I prefer logging to a file instead  of a browser prompt. Also plotting should be an easier task, and langauge independent.
+This is a personal project. It is a fork of PyGnuplot by Ben Schneider with adjustment for my personal usage. It's basiclly an interface to GnuPlot with added features for loggin files. It logs into cached files and use these files for ploting using GnuPlot. The files are csv and can be also used to debug/search with your favourite editor. 
 
-Gnuplot usually requires fewer line of code and it's lanuage independnet.
+Example: In training, the common practice is to save the loss values into a list (RAM) and log them into the prompt. Instead, a log method is used to store in cached files (+ loggin to the prompt) these cached files are CSV files, that can be easily quried via GnuPlot to produce plots or check them with your favourite tool. The library gives methods to query Gnuplot.
